@@ -1,5 +1,4 @@
 Genetic Task Scheduling
 =======================
 
-Rozwiązanie problemu przydziału zadań do wielu procesorów.
-
+Scheduling multiprocessor tasks with genetic algorithms - university project.
