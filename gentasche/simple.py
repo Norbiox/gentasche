@@ -1,9 +1,9 @@
 import random
 
 
-FILEPATH = "examples/example1.data"
-POPULATIONSIZE = 20
-REPEATS = 100
+FILEPATH = "exmpl_data/example1.data"
+POPULATIONSIZE = 100
+REPEATS = 20
 MUTATION_RATIO = 5
 
 

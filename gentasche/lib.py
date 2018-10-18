@@ -40,7 +40,6 @@ class Chromosome(list):
 	
 	@score.setter
 	def score(self, points):
-		assert isinstance(points, float), "score must be a floating point number"
 		self._score = points
 
 
@@ -53,7 +52,7 @@ class Chromosome(list):
 	def random_gens(cls, size:int, gen_types:int):
 		assert size > 0, "Chromosome must be at least 1 gen long"
 		assert gen_types > 0, "Chromosome must have some gen types defined"
-		return cls([random.choice(gen_types) for i in range(size)])
+		return cls([random.choice(list(range(gen_types))) for i in range(size)])
 
 
 	def crossover(self, other):
@@ -64,35 +63,23 @@ class Chromosome(list):
 
 	def mutate(self):
 		self.gens = random_swap_in(self.gens)
+		list.__init__(self, self.gens)
 
 
 
 class Population:
 
-
-	def __new__(cls, size:int, mutation_ratio:int, tasks:list, processors:list, \
-		chromosomes=[], *args, **kwargs):
-		if not chromosomes:
-			chromosomes = cls.randomize(size, tasks, processors)
-		return cls(size, mutation_ratio, tasks, processors, chromosomes, *args, **kwargs)
-
-
-	def __init__(self, size:int, mutation_ratio:int, tasks:list, processors:list, \
-		chromosomes:list, *args, **kwargs):
+	def __init__(self, size:int, mutation_ratio:int, processors:int, tasks:list, \
+		chromosomes:list=[], *args, **kwargs):
 		self.size = size
 		self.mutation_ratio = mutation_ratio
 		self.tasks = tasks
-		self.processors = processors_number
-		self._chromosomes = chromosomes
+		self.processors = processors
+		if chromosomes:
+			self._chromosomes = chromosomes
+		else:
+			self._chromosomes = self.randomize(size, tasks, processors)
 		self.get_scores()
-
-
-	@classmethod
-	def perform_mutations(cls, chromosomes, ratio):
-		for chromosome in chromosomes:
-			if random.randint(1,100) <= self.mutation_ratio:
-				chromosome.mutate()
-		return chromosomes
 
 
 	@classmethod
@@ -107,21 +94,26 @@ class Population:
 
 	def get_scores(self):
 		for chromosome in self._chromosomes:
-			chrom_scores = [0 for i in range(processors)]
+			chrom_scores = [0 for i in range(self.processors)]
 			for i,gen in enumerate(chromosome):
 				chrom_scores[gen] += self.tasks[i][gen]
 			chromosome.score = max(chrom_scores)
 
 
 	def next(self):
-		best_chromosomes = sorted(self._chromosomes, key=score)[:self.size//2]
+		# selection
+		chromosomes = sorted(self._chromosomes, key=score)[:self.size//2]
+		# crossover
 		for i in range(0,self.size//2,2):
-			chrom1 = best_chromosomes[i]
-			chrom2 = best_chromosomes[i+1]
-			best_chromosomes += chrom1.crossover(chrom2)
-		new_chromosomes = self.perform_mutations(best_chromosomes, self.mutation_ratio)
+			chrom1 = chromosomes[i]
+			chrom2 = chromosomes[i+1]
+			chromosomes += chrom1.crossover(chrom2)
+		# mutation
+		for chromosome in chromosomes:
+			if random.randint(1,100) <= self.mutation_ratio:
+				chromosome.mutate()
 		return self.__class__(self.size, self.mutation_ratio, self.tasks, \
-			self.processors, new_chromosomes)
+			self.processors, chromosomes)
 
 
 	def __iter__(self):
