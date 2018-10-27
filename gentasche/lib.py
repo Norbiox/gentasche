@@ -69,8 +69,9 @@ class Chromosome(list):
 
 class Population:
 
-	def __init__(self, size:int, mutation_ratio:int, processors:int, tasks:list, \
-		chromosomes:list=[], *args, **kwargs):
+	def __init__(self, id, size:int, mutation_ratio:int, processors:int, \
+		tasks:list, chromosomes:list=[], *args, **kwargs):
+		self.id = id
 		self.size = size
 		self.mutation_ratio = mutation_ratio
 		self.tasks = tasks
@@ -112,8 +113,8 @@ class Population:
 		for chromosome in chromosomes:
 			if random.randint(1,100) <= self.mutation_ratio:
 				chromosome.mutate()
-		return self.__class__(self.size, self.mutation_ratio, self.tasks, \
-			self.processors, chromosomes)
+		return self.__class__(self.id+1, self.size, self.mutation_ratio, \
+			self.tasks, self.processors, chromosomes)
 
 
 	def __iter__(self):
