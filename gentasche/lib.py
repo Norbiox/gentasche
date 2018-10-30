@@ -1,19 +1,5 @@
 import random
 
-""" tasks example for 4 tasks and 2 processors
-tasks = [
-	[1,1.5],
-	[4,3],
-	[2,2.1],
-	[6,3,9]
-]
-"""
-
-FILEPATH = "examples/example1.data"
-COUNT = 20
-REPEATS = 100
-MUTATION_RATIO = 5
-
 
 def random_swap_in(list) -> list:
 	assert len(list) >= 2, "list must have at least 2 elements"
@@ -80,7 +66,7 @@ class Population:
 			self._chromosomes = chromosomes
 		else:
 			self._chromosomes = self.randomize(size, tasks, processors)
-		self.get_scores()
+		self.score_chromosomes()
 
 
 	@classmethod
@@ -93,7 +79,12 @@ class Population:
 		return chromosomes
 
 
-	def get_scores(self):
+	@property
+	def scores(self):
+		return [ch.score for ch in self._chromosomes]
+
+
+	def score_chromosomes(self):
 		for chromosome in self._chromosomes:
 			chrom_scores = [0 for i in range(self.processors)]
 			for i,gen in enumerate(chromosome):
