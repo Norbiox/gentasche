@@ -2,7 +2,7 @@ import random
 
 
 FILEPATH = "exmpl_data/example1.data"
-POPULATIONSIZE = 100
+POPULATIONSIZE = 10
 REPEATS = 20
 MUTATION_RATIO = 5
 

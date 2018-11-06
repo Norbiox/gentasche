@@ -60,7 +60,8 @@ class SmallPopulationTestCase(unittest.TestCase):
 			[13,14,15,16]
 		]
 		self.chromosomes = [Chromosome.random_gens(4, 4) for i in range(size)]
-		self.population = Population(size, 2, 4, self.tasks, self.chromosomes)
+		self.population = Population(0, size=size, mutation_ratio=2, processors=4, \
+			tasks=self.tasks, chromosomes=self.chromosomes)
 
 
 	def test_population_autoscores(self):
@@ -76,7 +77,7 @@ class SmallPopulationTestCase(unittest.TestCase):
 			Chromosome([1,1]), 
 			Chromosome([1,0])
 		]
-		pop = Population(4, 5, 2, tasks, chroms)
+		pop = Population(1, 4, 5, 2, tasks, chroms)
 		expected_scores = [4, 4, 6, 3]
 		for i,chrom in enumerate(pop):
 			self.assertEqual(chrom.score, expected_scores[i])
