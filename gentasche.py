@@ -1,3 +1,4 @@
+import itertools
 import random
 from pathlib import Path
 
@@ -93,11 +94,11 @@ class Chromosome(list):
         if crossing_point is None:
             crossing_point = self.size // 2
         else:
-            assert 0 < crossing_point < self.size - 1, \
-                f"crossing_point must be between 0 and {self.size - 1}"
+            assert 0 < crossing_point < self.size, \
+                f"crossing_point must be between 0 and {self.size}"
         new1 = self.gens[:crossing_point] + other.gens[crossing_point::]
         new2 = other.gens[:crossing_point] + self.gens[crossing_point::]
-        return [new1, new2]
+        return [self.__class__(new1), self.__class__(new2)]
 
     def mutate(self):
         self.gens = random_swap_in(self.gens)
@@ -108,8 +109,25 @@ class Population(list):
     """Population - group of chromosomes of one generation."""
 
     def __init__(self, chromosomes: list, *args, **kwargs):
-        self.chromosomes = chromosomes
+        self._sorted = False
+        self._chromosomes = chromosomes
         list.__init__(self, self.chromosomes)
+
+    @property
+    def chromosomes(self):
+        return self._chromosomes
+
+    @property
+    def is_rated(self):
+        return all([ch.score for ch in self.chromosomes])
+
+    @property
+    def is_sorted(self):
+        return self._sorted
+
+    @property
+    def size(self):
+        return len(self.chromosomes)
 
     @classmethod
     def randomize(cls, size, n_tasks, n_processors):
@@ -117,24 +135,68 @@ class Population(list):
                        for _ in range(size)]
         return cls(chromosomes)
 
+    def select_one(self, test_pick=None):
+        assert self.is_rated, "Population must be rated before selection"
+        bounds = list(itertools.accumulate(
+            ch.fitness for ch in self.chromosomes
+        ))
+        pick = test_pick or random.random() * bounds[-1]
+        return next(chromosome for chromosome,
+                    bound in zip(self.chromosomes, bounds) if pick < bound)
+
+    def sort(self):
+        assert self.is_rated, "Population must be rated before sorting"
+        self._chromosomes = sorted(self.chromosomes, key=lambda ch: ch.score)
+        list.__init__(self, self.chromosomes)
+        self._sorted = True
+
 
 class GeneticTaskScheduler():
 
-    def __init__(self, population_size=10, mutation_ratio=5, repeats=100,
+    def __init__(self, population_size=10, mutation_ratio=5, max_repeats=100,
                  *args, **kwargs):
-        self.__repeats = 0
-        self.population_size = population_size
-        self.mutation_ratio = mutation_ratio
-        self.repeats = repeats
-        self.populations = []
-    
+        self._population_size = population_size
+        self._mutation_ratio = mutation_ratio
+        self._max_repeats = max_repeats
+        self._populations = []
+
+    @property
+    def max_repeats(self):
+        return self._max_repeats
+
+    @property
+    def mutation_ratio(self):
+        return self._mutation_ratio
+
+    @property
+    def populations(self):
+        return self._populations
+
+    @property
+    def population_size(self):
+        return self._population_size
+
+    @property
+    def repeats(self):
+        return len(self.populations)
+
     def feed(self, dataset):
         if not isinstance(dataset, Dataset):
             dataset = Dataset.read(dataset)
         self.dataset = dataset
 
-    def next_generation(self):
-        pass
+    def prepare(self, dataset=None):
+        assert len(self.populations) <= 1, \
+            "Cannot prepare already working scheduler"
+        if dataset is not None:
+            self.feed(dataset)
+        if not self.populations:
+            self._populations.append(Population.randomize(
+                self.population_size,
+                self.dataset.n_tasks,
+                self.dataset.n_processors
+            ))
+        self.rate_population(self.populations[0])
 
     def rate(self, chromosome):
         processor_times = [0] * self.dataset.n_processors
@@ -142,13 +204,49 @@ class GeneticTaskScheduler():
             processor_times[proc] += self.dataset.time_matrix[task][proc]
         chromosome.score = max(processor_times)
 
-    def schedule(self, dataset=None):
-        if dataset is not None:
-            self.feed(dataset)
-        if not populations:
-            populations.append(Population.randomize(
-                population_size,
-                self.dataset.n_tasks,
-                self.dataset.n_processors
-            ))
+    def rate_population(self, population):
+        for chromosome in population:
+            self.rate(chromosome)
+        population.sort()
 
+    def schedule(self, dataset=None):
+        self.prepare()
+        while self.repeats < self.max_repeats:
+            self.next_population()
+
+    def next_population(self):
+        assert self.populations, "First create initial population"
+        assert self.populations[-1].is_rated, \
+            "Last population not rated before continuation"
+        new_population = Population(
+            self.mutation(
+                self.crossover(
+                    self.selection(
+                        self.populations[-1]
+                    )
+                )
+            )
+        )
+        self.rate_population(new_population)
+        self._populations.append(new_population)
+        return new_population
+
+    # Genetic Algorithm Steps
+
+    def selection(self, population):
+        return [population.select_one() for _ in range(self.population_size)]
+
+    def crossover(self, population):
+        random.shuffle(population)
+        new_chromosomes = []
+        for i in range(0, len(population), 2):
+            new_chromosomes += list(population[i].crossover(
+                population[i + 1], random.randint(1, self.dataset.n_tasks - 1)
+            ))
+        return new_chromosomes
+
+    def mutation(self, population):
+        for chromosome in population:
+            if random.uniform(0, 100) <= self.mutation_ratio:
+                chromosome.mutate()
+        return population
