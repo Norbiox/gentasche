@@ -42,7 +42,6 @@ class Dataset:
             [' '.join([str(t) for t in l]) for l in self.time_matrix]
         )
         path.write_text(content)
-            
 
 
 class Chromosome(list):
@@ -84,7 +83,7 @@ class Chromosome(list):
         return len(self.gens)
 
     @classmethod
-    def random_gens(cls, n_tasks: int, n_processors: int):
+    def randomize(cls, n_tasks: int, n_processors: int):
         assert n_tasks > 0, "Number of tasks must be bigger than 0"
         assert n_processors > 0, "Number of processors must be bigger than 0"
         return cls([random.choice(list(range(n_processors)))
@@ -103,4 +102,53 @@ class Chromosome(list):
     def mutate(self):
         self.gens = random_swap_in(self.gens)
         list.__init__(self, self.gens)
+
+
+class Population(list):
+    """Population - group of chromosomes of one generation."""
+
+    def __init__(self, chromosomes: list, *args, **kwargs):
+        self.chromosomes = chromosomes
+        list.__init__(self, self.chromosomes)
+
+    @classmethod
+    def randomize(cls, size, n_tasks, n_processors):
+        chromosomes = [Chromosome.randomize(n_tasks, n_processors)
+                       for _ in range(size)]
+        return cls(chromosomes)
+
+
+class GeneticTaskScheduler():
+
+    def __init__(self, population_size=10, mutation_ratio=5, repeats=100,
+                 *args, **kwargs):
+        self.__repeats = 0
+        self.population_size = population_size
+        self.mutation_ratio = mutation_ratio
+        self.repeats = repeats
+        self.populations = []
+    
+    def feed(self, dataset):
+        if not isinstance(dataset, Dataset):
+            dataset = Dataset.read(dataset)
+        self.dataset = dataset
+
+    def next_generation(self):
+        pass
+
+    def rate(self, chromosome):
+        processor_times = [0] * self.dataset.n_processors
+        for task, proc in enumerate(chromosome):
+            processor_times[proc] += self.dataset.time_matrix[task][proc]
+        chromosome.score = max(processor_times)
+
+    def schedule(self, dataset=None):
+        if dataset is not None:
+            self.feed(dataset)
+        if not populations:
+            populations.append(Population.randomize(
+                population_size,
+                self.dataset.n_tasks,
+                self.dataset.n_processors
+            ))
 
