@@ -1,5 +1,7 @@
 import itertools
+import pandas as pd
 import random
+from matplotlib import pyplot as plt
 from pathlib import Path
 
 
@@ -114,16 +116,36 @@ class Population(list):
         list.__init__(self, self.chromosomes)
 
     @property
+    def best_chromosome(self):
+        return self.chromosomes[0]
+
+    @property
+    def best_score(self):
+        return self.best_chromosome.score
+
+    @property
+    def best_fitness(self):
+        return self.best_chromosome.fitness
+
+    @property
     def chromosomes(self):
         return self._chromosomes
 
     @property
     def is_rated(self):
-        return all([ch.score for ch in self.chromosomes])
+        if all([ch.score for ch in self.chromosomes]):
+            if not self.is_sorted:
+                self.sort()
+            return True
+        return False
 
     @property
     def is_sorted(self):
         return self._sorted
+
+    @property
+    def scores(self):
+        return pd.Series([ch.score for ch in self.chromosomes])
 
     @property
     def size(self):
@@ -145,7 +167,6 @@ class Population(list):
                     bound in zip(self.chromosomes, bounds) if pick < bound)
 
     def sort(self):
-        assert self.is_rated, "Population must be rated before sorting"
         self._chromosomes = sorted(self.chromosomes, key=lambda ch: ch.score)
         list.__init__(self, self.chromosomes)
         self._sorted = True
@@ -159,6 +180,28 @@ class GeneticTaskScheduler():
         self._mutation_ratio = mutation_ratio
         self._max_repeats = max_repeats
         self._populations = []
+
+    # Genetic Algorithm Steps
+
+    def selection(self, population):
+        return [population.select_one() for _ in range(self.population_size)]
+
+    def crossover(self, population):
+        random.shuffle(population)
+        new_chromosomes = []
+        for i in range(0, len(population), 2):
+            new_chromosomes += list(population[i].crossover(
+                population[i + 1], random.randint(1, self.dataset.n_tasks - 1)
+            ))
+        return new_chromosomes
+
+    def mutation(self, population):
+        for chromosome in population:
+            if random.uniform(0, 100) <= self.mutation_ratio:
+                chromosome.mutate()
+        return population
+
+    # Other important stuff
 
     @property
     def max_repeats(self):
@@ -180,10 +223,45 @@ class GeneticTaskScheduler():
     def repeats(self):
         return len(self.populations)
 
+    @property
+    def statistics(self):
+        stats = pd.DataFrame([])
+        stats['best_score'] = [p.scores.min() for p in self.populations]
+        stats['worst_score'] = [p.scores.max() for p in self.populations]
+        stats['median_score'] = [p.scores.median() for p in self.populations]
+        return stats
+
     def feed(self, dataset):
         if not isinstance(dataset, Dataset):
             dataset = Dataset.read(dataset)
         self.dataset = dataset
+
+    def next_population(self):
+        assert self.populations, "First create initial population"
+        assert self.populations[-1].is_rated, \
+            "Last population not rated before continuation"
+        new_population = Population(
+            self.mutation(
+                self.crossover(
+                    self.selection(
+                        self.populations[-1]
+                    )
+                )
+            )
+        )
+        self.rate_population(new_population)
+        self._populations.append(new_population)
+        return new_population
+
+    def plot_statistics(self):
+        plt.figure(figsize=(15, 10))
+        line, = plt.plot(self.statistics.best_score, color='green',
+                         label='best score')
+        plt.plot(self.statistics.worst_score, color='red', label='worst score')
+        plt.plot(self.statistics.median_score, color='blue',
+                 label='median score')
+        plt.grid()
+        plt.show()
 
     def prepare(self, dataset=None):
         assert len(self.populations) <= 1, \
@@ -210,43 +288,6 @@ class GeneticTaskScheduler():
         population.sort()
 
     def schedule(self, dataset=None):
-        self.prepare()
+        self.prepare(dataset)
         while self.repeats < self.max_repeats:
             self.next_population()
-
-    def next_population(self):
-        assert self.populations, "First create initial population"
-        assert self.populations[-1].is_rated, \
-            "Last population not rated before continuation"
-        new_population = Population(
-            self.mutation(
-                self.crossover(
-                    self.selection(
-                        self.populations[-1]
-                    )
-                )
-            )
-        )
-        self.rate_population(new_population)
-        self._populations.append(new_population)
-        return new_population
-
-    # Genetic Algorithm Steps
-
-    def selection(self, population):
-        return [population.select_one() for _ in range(self.population_size)]
-
-    def crossover(self, population):
-        random.shuffle(population)
-        new_chromosomes = []
-        for i in range(0, len(population), 2):
-            new_chromosomes += list(population[i].crossover(
-                population[i + 1], random.randint(1, self.dataset.n_tasks - 1)
-            ))
-        return new_chromosomes
-
-    def mutation(self, population):
-        for chromosome in population:
-            if random.uniform(0, 100) <= self.mutation_ratio:
-                chromosome.mutate()
-        return population
