@@ -261,7 +261,7 @@ class GeneticTaskScheduler():
         return new_population
 
     def plot_statistics(self):
-        plt.figure(figsize=(15, 10))
+        fig = plt.figure(figsize=(15, 10))
         line, = plt.plot(self.statistics.best_score, color='green',
                          label='best score')
         plt.plot(self.statistics.worst_score, color='red', label='worst score')
@@ -269,6 +269,7 @@ class GeneticTaskScheduler():
                  label='median score')
         plt.grid()
         plt.show()
+        return fig
 
     def prepare(self, dataset=None):
         assert len(self.populations) <= 1, \
