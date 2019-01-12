@@ -35,6 +35,13 @@ class Dataset:
             t_matrix = [[float(t) for t in l.split()] for l in f.readlines()]
         return cls(file.name, n_tasks, n_processors, t_matrix)
 
+    @classmethod
+    def random(cls, n_tasks, n_processors, name='random_data'):
+        tasks = [random.randint(500000, 10000000) for _ in range(n_tasks)]
+        processors = [random.randint(10, 35) * 100000 for _ in range(n_processors)]
+        time_matrix = [[round(t / p, 3) for p in processors] for t in tasks]
+        return cls(name, n_tasks, n_processors, time_matrix)
+
     def save(self, folder=None):
         if folder is not None:
             path = Path('/'.join([folder, self.name]))
