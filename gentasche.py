@@ -38,7 +38,8 @@ class Dataset:
     @classmethod
     def random(cls, n_tasks, n_processors, name='random_data'):
         tasks = [random.randint(500000, 10000000) for _ in range(n_tasks)]
-        processors = [random.randint(10, 35) * 100000 for _ in range(n_processors)]
+        step = 30 / (n_processors - 1)
+        processors = [(i * step + 10) * 100000 for i in range(n_processors)]
         time_matrix = [[round(t / p, 3) for p in processors] for t in tasks]
         return cls(name, n_tasks, n_processors, time_matrix)
 
@@ -99,18 +100,22 @@ class Chromosome(list):
         return cls([random.choice(list(range(n_processors)))
                     for i in range(n_tasks)])
  
-    def crossover(self, other, crossing_point=None):
-        if crossing_point is None:
-            crossing_point = random.randint(1, self.size-1)
-        else:
-            assert 0 < crossing_point < self.size, \
-                f"crossing_point must be between 0 and {self.size}"
+    def crossover(self, other):
+        if self == other:
+            other.mutate()
+            return [self, other]
+        crossing_point = random.randint(1, self.size-1)
         new1 = self.gens[:crossing_point] + other.gens[crossing_point::]
         new2 = other.gens[:crossing_point] + self.gens[crossing_point::]
         return [self.__class__(new1), self.__class__(new2)]
 
     def mutate(self):
-        self.gens = random_swap_in(self.gens)
+        # self.gens = random_swap_in(self.gens)
+        i1, i2 = 0, 0
+        while i1 == i2:
+            i1 = random.randint(0, self.size - 1)
+            i2 = random.randint(0, self.size - 1)
+        self.gens[i1] = self.gens[i2]
         list.__init__(self, self.gens)
 
     def __str__(self):
@@ -208,18 +213,17 @@ class GeneticTaskScheduler():
 
     def crossover(self, population):
         new_population, reproducers = [], []
-        survivor = population.pop(0)
         for c in population:
             if random.uniform(0, 100) <= self.crossover_operator:
                 reproducers.append(c)
             else:
                 new_population.append(c)
         if len(reproducers) % 2: new_population.append(reproducers.pop())
+        random.shuffle(reproducers)
         for i in range(0, len(reproducers), 2):
-            new_population += list(reproducers[i].crossover(
-                reproducers[i + 1], random.randint(1, self.dataset.n_tasks - 1)
-            ))
-        new_population.append(survivor)
+            new_population += list(
+                reproducers[i].crossover(reproducers[i + 1])
+            )
         return new_population
 
     def mutation(self, population):
@@ -265,6 +269,7 @@ class GeneticTaskScheduler():
         )
         new_population.rate(self.dataset)
         self.populations.append(new_population)
+        print(new_population.best_chromosome)
         return new_population
 
     def plot_statistics(self):
