@@ -130,7 +130,7 @@ class Population(list):
     """Population - group of chromosomes of one generation."""
 
     def __init__(self, chromosomes: list, *args, **kwargs):
-        self._sorted = False
+        self._rated = False
         self._chromosomes = chromosomes
         list.__init__(self, self.chromosomes)
 
@@ -152,15 +152,7 @@ class Population(list):
 
     @property
     def is_rated(self):
-        if all([ch.score for ch in self.chromosomes]):
-            if not self.is_sorted:
-                self.sort()
-            return True
-        return False
-
-    @property
-    def is_sorted(self):
-        return self._sorted
+        return self._rated
 
     @property
     def scores(self):
@@ -176,6 +168,16 @@ class Population(list):
                        for _ in range(size)]
         return cls(chromosomes)
 
+    def rate(self, dataset):
+        for chromosome in self._chromosomes:
+            processor_times = [0] * dataset.n_processors
+            for task, proc in enumerate(chromosome):
+                processor_times[proc] += dataset.time_matrix[task][proc]
+            chromosome.score = max(processor_times)
+        self._chromosomes = sorted(self.chromosomes, key=lambda ch: ch.score)
+        list.__init__(self, self.chromosomes)
+        self._rated = True
+
     def select_one(self, test_pick=None):
         assert self.is_rated, "Population must be rated before selection"
         bounds = list(itertools.accumulate(
@@ -185,18 +187,14 @@ class Population(list):
         return next(chromosome for chromosome,
                     bound in zip(self.chromosomes, bounds) if pick < bound)
 
-    def sort(self):
-        self._chromosomes = sorted(self.chromosomes, key=lambda ch: ch.score)
-        list.__init__(self, self.chromosomes)
-        self._sorted = True
-
 
 class GeneticTaskScheduler():
 
-    def __init__(self, population_size=10, mutation_ratio=5, max_repeats=100,
-                 *args, **kwargs):
+    def __init__(self, population_size=10, crossover_operator=75,
+                 mutation_operator=5, max_repeats=100, *args, **kwargs):
         self._population_size = population_size
-        self._mutation_ratio = mutation_ratio
+        self._crossover_operator = crossover_operator
+        self._mutation_operator = mutation_operator
         self._max_repeats = max_repeats
         self._populations = []
 
@@ -207,16 +205,22 @@ class GeneticTaskScheduler():
 
     def crossover(self, population):
         random.shuffle(population)
-        new_chromosomes = []
-        for i in range(0, len(population), 2):
-            new_chromosomes += list(population[i].crossover(
-                population[i + 1], random.randint(1, self.dataset.n_tasks - 1)
+        new_population, reproducers = [], []
+        for c in population:
+            if random.uniform(0, 100) <= self.crossover_operator:
+                reproducers.append(c)
+            else:
+                new_population.append(c)
+        if len(reproducers) % 2: new_population.append(reproducers.pop())
+        for i in range(0, len(reproducers), 2):
+            new_population += list(reproducers[i].crossover(
+                reproducers[i + 1], random.randint(1, self.dataset.n_tasks - 1)
             ))
-        return new_chromosomes
+        return new_population
 
     def mutation(self, population):
         for chromosome in population:
-            if random.uniform(0, 100) <= self.mutation_ratio:
+            if random.uniform(0, 100) <= self.mutation_operator:
                 chromosome.mutate()
         return population
 
@@ -226,12 +230,16 @@ class GeneticTaskScheduler():
         return sorted(self.populations, key=lambda p: p.best_score)[0][0]
 
     @property
+    def crossover_operator(self):
+        return self._crossover_operator
+
+    @property
     def max_repeats(self):
         return self._max_repeats
 
     @property
-    def mutation_ratio(self):
-        return self._mutation_ratio
+    def mutation_operator(self):
+        return self._mutation_operator
 
     @property
     def populations(self):
@@ -260,8 +268,6 @@ class GeneticTaskScheduler():
 
     def next_population(self):
         assert self.populations, "First create initial population"
-        assert self.populations[-1].is_rated, \
-            "Last population not rated before continuation"
         new_population = Population(
             self.mutation(
                 self.crossover(
@@ -271,7 +277,7 @@ class GeneticTaskScheduler():
                 )
             )
         )
-        self.rate_population(new_population)
+        new_population.rate(self.dataset)
         self._populations.append(new_population)
         return new_population
 
@@ -292,23 +298,13 @@ class GeneticTaskScheduler():
         if dataset is not None:
             self.feed(dataset)
         if not self.populations:
-            self._populations.append(Population.randomize(
+            new_population = Population.randomize(
                 self.population_size,
                 self.dataset.n_tasks,
                 self.dataset.n_processors
-            ))
-        self.rate_population(self.populations[0])
-
-    def rate(self, chromosome):
-        processor_times = [0] * self.dataset.n_processors
-        for task, proc in enumerate(chromosome):
-            processor_times[proc] += self.dataset.time_matrix[task][proc]
-        chromosome.score = max(processor_times)
-
-    def rate_population(self, population):
-        for chromosome in population:
-            self.rate(chromosome)
-        population.sort()
+            )
+            new_population.rate(self.dataset)
+            self._populations.append(new_population)
 
     def schedule(self, dataset=None):
         self.prepare(dataset)
