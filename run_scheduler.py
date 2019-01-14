@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import argparse
 from pathlib import Path
 
@@ -17,10 +18,11 @@ dataset = Dataset.read(args.dataset_file)
 gts = GeneticTaskScheduler(args.population_size, args.mutation_ratio,
                            args.max_repeats)
 gts.schedule(dataset)
+print(gts.best_of_all)
 fig = gts.plot_statistics()
 p = Path('images')
 p.mkdir(parents=True, exist_ok=True)
 fig.savefig(p / ('_'.join([
-    args.dataset_file.split('/')[-1] , str(args.population_size), 
+    args.dataset_file.split('/')[-1], str(args.population_size),
     str(args.mutation_ratio).replace('.', '_'), str(args.max_repeats)
 ]) + '.png'))

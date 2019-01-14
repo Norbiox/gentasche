@@ -113,6 +113,18 @@ class Chromosome(list):
         self.gens = random_swap_in(self.gens)
         list.__init__(self, self.gens)
 
+    def __str__(self):
+        strings = [
+            f"Chromosome with fitness {self.fitness}",
+            f"Table of processors tasks:"
+        ]
+        for p in set(self.gens):
+            strings.append(f"processor {p}: " + ' '.join([
+                str(i) for i in range(self.size) if self.gens[i] == p
+            ]))
+        strings.append(f"Overall processing time: {self.score}s")
+        return '\n'.join(strings)
+
 
 class Population(list):
     """Population - group of chromosomes of one generation."""
@@ -209,6 +221,9 @@ class GeneticTaskScheduler():
         return population
 
     # Other important stuff
+    @property
+    def best_of_all(self):
+        return sorted(self.populations, key=lambda p: p.best_score)[0][0]
 
     @property
     def max_repeats(self):
