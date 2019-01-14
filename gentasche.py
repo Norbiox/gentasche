@@ -98,10 +98,10 @@ class Chromosome(list):
         assert n_processors > 0, "Number of processors must be bigger than 0"
         return cls([random.choice(list(range(n_processors)))
                     for i in range(n_tasks)])
-
+ 
     def crossover(self, other, crossing_point=None):
         if crossing_point is None:
-            crossing_point = self.size // 2
+            crossing_point = random.randint(1, self.size-1)
         else:
             assert 0 < crossing_point < self.size, \
                 f"crossing_point must be between 0 and {self.size}"
@@ -136,7 +136,7 @@ class Population(list):
 
     @property
     def best_chromosome(self):
-        return self.chromosomes[0]
+        return sorted(self._chromosomes, key=lambda c: c.score)[0]
 
     @property
     def best_score(self):
@@ -192,20 +192,23 @@ class GeneticTaskScheduler():
 
     def __init__(self, population_size=10, crossover_operator=75,
                  mutation_operator=5, max_repeats=100, *args, **kwargs):
-        self._population_size = population_size
-        self._crossover_operator = crossover_operator
-        self._mutation_operator = mutation_operator
-        self._max_repeats = max_repeats
-        self._populations = []
+        self.population_size = population_size
+        self.crossover_operator = crossover_operator
+        self.mutation_operator = mutation_operator
+        self.max_repeats = max_repeats
+        self.populations = []
 
     # Genetic Algorithm Steps
 
     def selection(self, population):
-        return [population.select_one() for _ in range(self.population_size)]
+        return sorted(
+            [population.select_one() for _ in range(self.population_size)],
+            key=lambda c: c.score
+        )
 
     def crossover(self, population):
-        random.shuffle(population)
         new_population, reproducers = [], []
+        survivor = population.pop(0)
         for c in population:
             if random.uniform(0, 100) <= self.crossover_operator:
                 reproducers.append(c)
@@ -216,38 +219,21 @@ class GeneticTaskScheduler():
             new_population += list(reproducers[i].crossover(
                 reproducers[i + 1], random.randint(1, self.dataset.n_tasks - 1)
             ))
+        new_population.append(survivor)
         return new_population
 
     def mutation(self, population):
+        i = 0
         for chromosome in population:
             if random.uniform(0, 100) <= self.mutation_operator:
                 chromosome.mutate()
+                i += 1
         return population
 
     # Other important stuff
     @property
     def best_of_all(self):
         return sorted(self.populations, key=lambda p: p.best_score)[0][0]
-
-    @property
-    def crossover_operator(self):
-        return self._crossover_operator
-
-    @property
-    def max_repeats(self):
-        return self._max_repeats
-
-    @property
-    def mutation_operator(self):
-        return self._mutation_operator
-
-    @property
-    def populations(self):
-        return self._populations
-
-    @property
-    def population_size(self):
-        return self._population_size
 
     @property
     def repeats(self):
@@ -278,7 +264,7 @@ class GeneticTaskScheduler():
             )
         )
         new_population.rate(self.dataset)
-        self._populations.append(new_population)
+        self.populations.append(new_population)
         return new_population
 
     def plot_statistics(self):
@@ -304,7 +290,7 @@ class GeneticTaskScheduler():
                 self.dataset.n_processors
             )
             new_population.rate(self.dataset)
-            self._populations.append(new_population)
+            self.populations.append(new_population)
 
     def schedule(self, dataset=None):
         self.prepare(dataset)
