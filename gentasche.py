@@ -340,12 +340,14 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--crossover_operator', type=float, default=75.0)
     parser.add_argument('-m', '--mutation_operator', type=float, default=5.0)
     parser.add_argument('-r', '--max_repeats', type=int, default=100)
+    parser.add_argument('-o', '--optimize_memory', type=int, default=1)
 
     args = parser.parse_args()
 
     dataset = Dataset.read(args.dataset_file)
     gts = GeneticTaskScheduler(args.population_size, args.crossover_operator,
-                               args.mutation_operator, args.max_repeats)
+                               args.mutation_operator, args.max_repeats,
+                               bool(args.optimize_memory))
     gts.schedule(dataset)
     print(gts.best_of_all)
     fig = gts.plot_statistics()
