@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+import argparse
 import itertools
 import pandas as pd
 import random
@@ -110,17 +112,14 @@ class Chromosome(list):
         return [self.__class__(new1), self.__class__(new2)]
 
     def mutate(self):
-        # self.gens = random_swap_in(self.gens)
-        i1, i2 = 0, 0
-        while i1 == i2:
-            i1 = random.randint(0, self.size - 1)
-            i2 = random.randint(0, self.size - 1)
-        self.gens[i1] = self.gens[i2]
+        self.gens[random.randint(0, self.size - 1)] = random.choice(
+            list(set(self))
+        )
         list.__init__(self, self.gens)
 
     def __str__(self):
         strings = [
-            f"Chromosome with fitness {self.fitness}",
+            f"Chromosome with fitness {self.fitness} and score {self.score}",
             f"Table of processors tasks:"
         ]
         for p in set(self.gens):
@@ -160,12 +159,20 @@ class Population(list):
         return self._rated
 
     @property
+    def median_score(self):
+        return self.scores.median()
+
+    @property
     def scores(self):
         return pd.Series([ch.score for ch in self.chromosomes])
 
     @property
     def size(self):
         return len(self.chromosomes)
+
+    @property
+    def worst_score(self):
+        return self.scores.max()
 
     @classmethod
     def randomize(cls, size, n_tasks, n_processors):
@@ -193,14 +200,26 @@ class Population(list):
                     bound in zip(self.chromosomes, bounds) if pick < bound)
 
 
+class ArchivedPopulation():
+
+    def __init__(self, population):
+        self.best_chromosome = population.best_chromosome
+        self.best_score = self.best_chromosome.score
+        self.best_fitness = self.best_chromosome.fitness
+        self.worst_score = population.scores.max()
+        self.median_score = population.scores.median()
+
+
 class GeneticTaskScheduler():
 
     def __init__(self, population_size=10, crossover_operator=75,
-                 mutation_operator=5, max_repeats=100, *args, **kwargs):
+                 mutation_operator=5, max_repeats=100, archive=True,
+                 *args, **kwargs):
         self.population_size = population_size
         self.crossover_operator = crossover_operator
         self.mutation_operator = mutation_operator
         self.max_repeats = max_repeats
+        self.archive = archive
         self.populations = []
 
     # Genetic Algorithm Steps
@@ -213,6 +232,7 @@ class GeneticTaskScheduler():
 
     def crossover(self, population):
         new_population, reproducers = [], []
+        survivor = population.pop(0)
         for c in population:
             if random.uniform(0, 100) <= self.crossover_operator:
                 reproducers.append(c)
@@ -224,6 +244,7 @@ class GeneticTaskScheduler():
             new_population += list(
                 reproducers[i].crossover(reproducers[i + 1])
             )
+        new_population.append(survivor)
         return new_population
 
     def mutation(self, population):
@@ -237,7 +258,8 @@ class GeneticTaskScheduler():
     # Other important stuff
     @property
     def best_of_all(self):
-        return sorted(self.populations, key=lambda p: p.best_score)[0][0]
+        return sorted(self.populations,
+                      key=lambda p: p.best_score)[0].best_chromosome
 
     @property
     def repeats(self):
@@ -246,9 +268,9 @@ class GeneticTaskScheduler():
     @property
     def statistics(self):
         stats = pd.DataFrame([])
-        stats['best_score'] = [p.scores.min() for p in self.populations]
-        stats['worst_score'] = [p.scores.max() for p in self.populations]
-        stats['median_score'] = [p.scores.median() for p in self.populations]
+        stats['best_score'] = [p.best_score for p in self.populations]
+        stats['worst_score'] = [p.worst_score for p in self.populations]
+        stats['median_score'] = [p.median_score for p in self.populations]
         return stats
 
     def feed(self, dataset):
@@ -269,7 +291,12 @@ class GeneticTaskScheduler():
         )
         new_population.rate(self.dataset)
         self.populations.append(new_population)
-        print(new_population.best_chromosome)
+        print(f"Last best score: {new_population.best_chromosome.score}")
+        if self.archive:
+            previous_population = self.populations[-2]
+            ap = ArchivedPopulation(previous_population)
+            self.populations[-2] = ap
+            del previous_population
         return new_population
 
     def plot_statistics(self):
@@ -280,6 +307,7 @@ class GeneticTaskScheduler():
         plt.plot(self.statistics.median_score, color='blue',
                  label='median score')
         plt.grid()
+        plt.legend()
         plt.show()
         return fig
 
@@ -301,3 +329,32 @@ class GeneticTaskScheduler():
         self.prepare(dataset)
         while self.repeats < self.max_repeats:
             self.next_population()
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description="Run GeneticTaskScheduler against dataset"
+    )
+    parser.add_argument('dataset_file', type=str, help='dataset file path')
+    parser.add_argument('-p', '--population_size', type=int, default=10)
+    parser.add_argument('-c', '--crossover_operator', type=float, default=75.0)
+    parser.add_argument('-m', '--mutation_operator', type=float, default=5.0)
+    parser.add_argument('-r', '--max_repeats', type=int, default=100)
+
+    args = parser.parse_args()
+
+    dataset = Dataset.read(args.dataset_file)
+    gts = GeneticTaskScheduler(args.population_size, args.crossover_operator,
+                               args.mutation_operator, args.max_repeats)
+    gts.schedule(dataset)
+    print(gts.best_of_all)
+    fig = gts.plot_statistics()
+    p = Path('images')
+    p.mkdir(parents=True, exist_ok=True)
+    fig.savefig(p / ('_'.join([
+        args.dataset_file.split('/')[-1],
+        str(args.population_size),
+        str(args.crossover_operator).replace('.','_'),
+        str(args.mutation_operator).replace('.', '_'),
+        str(args.max_repeats)
+    ]) + '.png'))
