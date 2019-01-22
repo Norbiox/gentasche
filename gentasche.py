@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 import argparse
 import itertools
+import math
 import pandas as pd
 import random
+import time
 from matplotlib import pyplot as plt
 from pathlib import Path
 
@@ -39,9 +41,14 @@ class Dataset:
 
     @classmethod
     def random(cls, n_tasks, n_processors, name='random_data'):
+        if math.log2(n_processors) % 1.0:
+            raise ValueError("Number of processors must be power of 2!")
+        processors_lib = [int(p) for p in [1.5e5, 2.5e6, 3e6, 4e6]]
         tasks = [random.randint(500000, 10000000) for _ in range(n_tasks)]
-        step = 30 / (n_processors - 1)
-        processors = [(i * step + 10) * 100000 for i in range(n_processors)]
+        processors = [
+            p for sublist in [
+                [i] * int(n_processors / 4) for i in processors_lib
+            ] for p in sublist]
         time_matrix = [[round(t / p, 3) for p in processors] for t in tasks]
         return cls(name, n_tasks, n_processors, time_matrix)
 
@@ -214,13 +221,16 @@ class GeneticTaskScheduler():
 
     def __init__(self, population_size=10, crossover_operator=75,
                  mutation_operator=5, max_repeats=100, archive=True,
+                 show_plot=True,
                  *args, **kwargs):
         self.population_size = population_size
         self.crossover_operator = crossover_operator
         self.mutation_operator = mutation_operator
         self.max_repeats = max_repeats
         self.archive = archive
+        self.show_plot = show_plot
         self.populations = []
+        self.working_time = None
 
     # Genetic Algorithm Steps
 
@@ -300,15 +310,29 @@ class GeneticTaskScheduler():
         return new_population
 
     def plot_statistics(self):
-        fig = plt.figure(figsize=(15, 10))
-        line, = plt.plot(self.statistics.best_score, color='green',
-                         label='best score')
-        plt.plot(self.statistics.worst_score, color='red', label='worst score')
-        plt.plot(self.statistics.median_score, color='blue',
-                 label='median score')
+        fig = plt.figure(figsize=(12, 6))
+        fig.suptitle(
+            f"Population size: {self.population_size}, " +
+            f"crossover: {self.crossover_operator}%, " +
+            f"mutation: {self.mutation_operator}%, " +
+            f"processing time: {round(self.working_time, 3)}s",
+            fontsize = 12
+        )
+        best_scores = self.statistics.best_score
+        line, = plt.plot(best_scores, color='green', label='best scores')
+        y = round(best_scores.min(), 3)
+        x = best_scores[best_scores == best_scores.min()].index[0]
+        line, = plt.plot(x, y, 'ro', label='best score')
+        plt.text(x, y, str(y)+'s', fontsize=14, fontweight='bold')
+
+        #line, = plt.plot(self.statistics.worst_score, color='red',
+        #               label='worst scores')
+        #line, = plt.plot(self.statistics.median_score, color='blue',
+        #         label='median scores')
         plt.grid()
         plt.legend()
-        plt.show()
+        if self.show_plot:
+            plt.show()
         return fig
 
     def prepare(self, dataset=None):
@@ -326,9 +350,11 @@ class GeneticTaskScheduler():
             self.populations.append(new_population)
 
     def schedule(self, dataset=None):
+        t0 = time.time()
         self.prepare(dataset)
         while self.repeats < self.max_repeats:
             self.next_population()
+        self.working_time = time.time() - t0
 
 
 if __name__ == '__main__':
@@ -341,22 +367,26 @@ if __name__ == '__main__':
     parser.add_argument('-m', '--mutation_operator', type=float, default=5.0)
     parser.add_argument('-r', '--max_repeats', type=int, default=100)
     parser.add_argument('-o', '--optimize_memory', type=int, default=1)
+    parser.add_argument('-s', '--show_plot', type=int, default=1)
 
     args = parser.parse_args()
 
     dataset = Dataset.read(args.dataset_file)
-    gts = GeneticTaskScheduler(args.population_size, args.crossover_operator,
-                               args.mutation_operator, args.max_repeats,
-                               bool(args.optimize_memory))
+    gts = GeneticTaskScheduler(
+        args.population_size, args.crossover_operator, args.mutation_operator,
+        args.max_repeats, bool(args.optimize_memory), bool(args.show_plot)
+    )
     gts.schedule(dataset)
     print(gts.best_of_all)
+    print(f"Processing time: {gts.working_time}")
     fig = gts.plot_statistics()
     p = Path('images')
     p.mkdir(parents=True, exist_ok=True)
     fig.savefig(p / ('_'.join([
         args.dataset_file.split('/')[-1],
-        str(args.population_size),
-        str(args.crossover_operator).replace('.','_'),
-        str(args.mutation_operator).replace('.', '_'),
-        str(args.max_repeats)
+        'P' + str(args.population_size),
+        'C' + str(args.crossover_operator).replace('.','_'),
+        'M' + str(args.mutation_operator).replace('.', '_'),
+        'R' + str(args.max_repeats),
+        'T' + str(int(gts.working_time))
     ]) + '.png'))
