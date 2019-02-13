@@ -362,19 +362,21 @@ if __name__ == '__main__':
         description="Run GeneticTaskScheduler against dataset"
     )
     parser.add_argument('dataset_file', type=str, help='dataset file path')
-    parser.add_argument('-p', '--population_size', type=int, default=10)
-    parser.add_argument('-c', '--crossover_operator', type=float, default=75.0)
-    parser.add_argument('-m', '--mutation_operator', type=float, default=5.0)
-    parser.add_argument('-r', '--max_repeats', type=int, default=100)
-    parser.add_argument('-o', '--optimize_memory', type=int, default=1)
-    parser.add_argument('-s', '--show_plot', type=int, default=1)
+    parser.add_argument('-p', '--population-size', type=int, default=10)
+    parser.add_argument('-c', '--crossover-operator', type=float, default=75.0)
+    parser.add_argument('-m', '--mutation-operator', type=float, default=5.0)
+    parser.add_argument('-r', '--max-repeats', type=int, default=100)
+    parser.add_argument('--no-optimization', dest='optimize',
+                        action='store_false')
+    parser.add_argument('--show-plot', dest='show_plot', action='store_true')
+    parser.set_defaults(optimize=True, show_plot=False)
 
     args = parser.parse_args()
 
     dataset = Dataset.read(args.dataset_file)
     gts = GeneticTaskScheduler(
         args.population_size, args.crossover_operator, args.mutation_operator,
-        args.max_repeats, bool(args.optimize_memory), bool(args.show_plot)
+        args.max_repeats, args.optimize, args.show_plot
     )
     gts.schedule(dataset)
     print(gts.best_of_all)
