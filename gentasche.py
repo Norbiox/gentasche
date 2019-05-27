@@ -43,13 +43,18 @@ class Dataset:
     def random(cls, n_tasks, n_processors, name='random_data'):
         if math.log2(n_processors) % 1.0:
             raise ValueError("Number of processors must be power of 2!")
-        processors_lib = [int(p) for p in [1.5e5, 2.5e6, 3e6, 4e6]]
+        processors = [1.0e6, 1.5e6, 2.0e6, 2.5e6, 3.0e6, 3.5e6, 4.0e6, 5.0e6]
+        if n_processors == 2:
+            processors = [processors[1], processors[3]]
+        elif n_processors == 4:
+            processors = processors[::2]
+        elif n_processors > 8:
+            processors = sum([
+                [p] * (n_processors // 8) for p in processors
+            ], [])
         tasks = [random.randint(500000, 10000000) for _ in range(n_tasks)]
-        processors = [
-            p for sublist in [
-                [i] * int(n_processors / 4) for i in processors_lib
-            ] for p in sublist]
         time_matrix = [[round(t / p, 3) for p in processors] for t in tasks]
+        print(processors, tasks)
         return cls(name, n_tasks, n_processors, time_matrix)
 
     def save(self, folder=None):
